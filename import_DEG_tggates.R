@@ -1,4 +1,4 @@
-#retrieving CEL file attributes 
+#retrieve and combine attributes in single dataframe
 setwd("/Users/brandismith/Box/Dow/Nec")#pathToSingleDoseFolders
 files <- list.files(path= ".", pattern='*.tsv$', recursive = T)
 for(i in 1:length(files)) {
@@ -14,13 +14,13 @@ count <- 1
 for( i in 1:length(df_24hr_nochip_high_control$BARCODE)){
   if(i/6. > count){
     count = count + 1
+    }
+  bar_codes[count, (i - (count-1)*6)] <- paste( "/Users/brandismith/Box/Dow/Nec/", 
+                                                df_24hr_nochip_high_control$COMPOUND_NAME[i], ".Rat.in_vivo.Liver.Single/celfiles/",
+                                                df_24hr_nochip_high_control$BARCODE[i], ".", "CEL", sep="")
   }
-  
-  bar_codes[count, (i - (count-1)*6)] <- paste( "/Users/brandismith/Box/Dow/Nec",
-                                             df_24hr_nochip_high_control$COMPOUND_NAME[i], ".Rat.in_vivo.Liver.Single/celfiles/",
-                                             df_24hr_nochip_high_control$BARCODE[i], ".", "CEL", sep="")}
 
-###create labels for CEL/sample files
+###create labels column in attribute file to differentiate control and high dose barcodes
 x <- list()
 for (i in 1:length(df_24hr_nochip_high_control$SACRI_PERIOD))
 { x <- paste(df_24hr_nochip_high_control$COMPOUND.Abbr., ".", 
@@ -33,44 +33,41 @@ if (!requireNamespace("BiocManager", quietly = TRUE))
   install.packages("BiocManager")
 
 BiocManager::install("affy")
+BiocManager::install("rat2302.db")
+library(rat2302.db)
 library(affy)
 dimension <- dim(bar_codes)
+#this may take some time...
 for(i in 1: dimension[1])
   assign(paste0("test", i), cbind(data.frame(exprs(rma(read.affybatch(bar_codes[i,]))))))
 
-dat2<-cbind(test1,test2,test3,test4,test5, test6,test7,test8,test9,test10,test11, test12,
+df_exprs<-cbind(test1,test2,test3,test4,test5, test6,test7,test8,test9,test10,test11, test12,
             test13,test14,test15,test16,test17,test18,test19, test20,test21,test22,test23,test24,
             test25,test26,test27,test28,test29,test30,test31,test32,test33,test34,test35,test36,
             test37,test38,test39,test40,test41,test42)
 
-names(dat2) <-df_24hr_nochip_high_control$label[1:length(bar_codes)]
+names(df_exprs) <-df_24hr_nochip_high_control$label[1:length(bar_codes)]
 
+BiocManager::install("limma")
 library(limma)
 design <- model.matrix(~0 + df_24hr_nochip_high_control$DOSE_LEVEL[1:length(bar_codes)])
 design <- design[,-c(3,4)]
 colnames(design) <- c("Control","High")
 rownames(design) <- df_24hr_nochip_high_control$label[1:length(bar_codes)]   
-fit <- lmFit(dat2, design)
+fit <- lmFit(df_exprs, design)
 cont.matrix <- makeContrasts(CvsH=Control-High, levels=design)
 fit2 <- contrasts.fit(fit, cont.matrix)
 fit2 <- eBayes(fit2)
 DEG <-topTable(fit2, n=Inf)
 
+#matching chip names with annotated numbers from rat database to get list of genes
+Annot <- data.frame(ACCNUM=sapply(contents(rat2302ACCNUM),
+                                  paste, collapse=", "), SYMBOL=sapply(contents(rat2302SYMBOL), 
+                                                                       paste, collapse=", "), DESC=sapply(contents(rat2302GENENAME), paste, collapse=", "))
+
+
 DEG_annot <- merge(Annot, DEG, by.x=0, by.y=0, all=T)
 rownames(DEG_annot)<-DEG_annot$Row.names
-all.equal(rownames(DEG_annot), rownames(dat2))
-DEG.list3<-cbind(DEG_annot, dat2)
-DEG.list3<-cbind(DEG_annot, dat)
-DEG.list3.sig <- DEG.list3[which(DEG.list3$adj.P.Val < 0.01),]
-#SOME SYMBOLS UNKNOWN ; CANT USE; row.names(DEG.list2.sig) <- DEG.list2.sig$SYMBOL
-#install.packages("gplots")
-library(gplots)
-heatmap.2(as.matrix(t(log2(DEG.list2.sig[11:40])), scale="row", cexRow=1.5, labRow=df_24hr_nochip_high_control$label), tracecol = NULL)
-
-all.equal(rownames(dat2), rownames(test1))
-dat<-cbind(dat,dat2)
-write.csv(DEG.list2, "NecDEG.csv")
-save.image("NecDEG.RData")
-all.equal(rownames(DEG.list), rownames(DEG.list2))
-#if true combine
-DEG.list <-cbind(DEG.list, DEG.list2)
+all.equal(rownames(DEG_annot), rownames(df_exprs))
+DEG.list.sig <- DEG_annot[which(DEG_annot$adj.P.Val < 0.01),]
+write.csv(DEG.list.sig, "NecDEG.csv")
