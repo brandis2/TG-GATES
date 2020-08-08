@@ -1,12 +1,7 @@
 #retrieve and combine attributes in single dataframe
 setwd("/Users/brandismith/Box/Dow/Nec")#pathToSingleDoseFolders
 files <- list.files(path= ".", pattern='*.tsv$', recursive = T)
-for(i in 1:length(files)) {
-  if(i == 1)
-    df <- read.csv(files[i], sep = '\t')
-  else
-    df <- rbind(df, read.csv(files[i], sep = '\t'))
-}
+
 ## Retrieving chip BARCODES for 24 hr dose times
 df_24hr_nochip_high_control= subset(df, (df$SACRI_PERIOD == '24 hr'& df$BARCODE != 'No ChipData') & (df$DOSE_LEVEL == 'High' | df$DOSE_LEVEL == 'Control') )
 bar_codes <- matrix(data=NA, nrow = 42, ncol= 6)
@@ -28,7 +23,7 @@ for (i in 1:length(df_24hr_nochip_high_control$SACRI_PERIOD))
              seq(1:3), sep="")}
 df_24hr_nochip_high_control$label <- x
 
-#install affy and retrieve gene expressions from CEL files
+#install affy, limma, and annotations and retrieve gene expressions from CEL files
 if (!requireNamespace("BiocManager", quietly = TRUE))
   install.packages("BiocManager")
 
